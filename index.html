@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chat App</title>
+  <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+
+<body>
+
+<!-- 로그인 화면 -->
+<div id="auth">
+  <h2>Login / Register</h2>
+  <input id="username" placeholder="Username"><br>
+  <input id="password" type="password" placeholder="Password"><br>
+  <button onclick="login()">Login</button>
+  <button onclick="register()">Register</button>
+</div>
+
+<!-- 채팅 UI -->
+<div id="chatUI" style="display:none;">
+  <h2>🌍 Chat Rooms</h2>
+
+  <div>
+    <input id="roomName" placeholder="Room name">
+    <button onclick="createRoom()">방 만들기</button>
+    <button onclick="resetChat()">채팅 초기화</button>
+  </div>
+
+  <h3>📁 방 목록</h3>
+  <div id="rooms"></div>
+
+  <h3 id="currentRoomTitle">현재 방: main</h3>
+  <div id="chat" style="height:300px; overflow:auto; border:1px solid black;"></div>
+
+  <input id="msg" placeholder="Type message...">
+  <button onclick="sendMsg()">Send</button>
+</div>
+
+<script>
+const socket = io("http://localhost:5000");
+
+let currentRoom = "main";
+let username = null;
+
+// 로그인
+function login() {
+  const id = document.getElementById("username").value;
+  const pw = document.getElementById("password").value;
+  socket.emit("login", {id, pw});
+}
+
+// 회원가입
+function register() {
+  const id = document.getElementById("username").value;
+  const pw = document.getElementById("password").value;
+  socket.emit("register", {id, pw});
+}
+
+// 로그인 성공
+socket.on("login_success", (id) => {
+  username = id;
+  document.getElementById("auth").style.display = "none";
+  document.getElementById("chatUI").style.display = "block";
+  socket.emit("get_rooms");
+  joinRoom("main");
+});
+
+// 실패
+socket.on("login_fail", (msg) => {
+  alert(msg);
+});
+
+// 회원가입 성공
+socket.on("register_success", () => {
+  alert("회원가입 성공");
+});
+
+// 방 생성
+function createRoom() {
+  const room = document.getElementById("roomName").value.trim();
+  if (!room) return;
+  socket.emit("create_room", room);
+}
+
+// 채팅 초기화
+function resetChat() {
+  socket.emit("reset_chat", currentRoom);
+}
+
+// 방 목록 받기
+socket.on("room_list", (rooms) => {
+  const div = document.getElementById("rooms");
+  div.innerHTML = "";
+  rooms.forEach(r => {
+    const btn = document.createElement("button");
+    btn.innerText = r;
+    btn.onclick = () => joinRoom(r);
+    div.appendChild(btn);
+  });
+});
+
+// 방 이동
+function joinRoom(room) {
+  currentRoom = room;
+  document.getElementById("currentRoomTitle").innerText = "현재 방: " + room;
+  document.getElementById("chat").innerHTML = "";
+  socket.emit("join_room", room);
+}
+
+// 메시지 불러오기
+socket.on("load_messages", (messages) => {
+  document.getElementById("chat").innerHTML = "";
+  messages.forEach(addMessage);
+});
+
+// 실시간 메시지
+socket.on("new_message", (msg) => {
+  if (msg.room === currentRoom) addMessage(msg);
+});
+
+// 메시지 보내기
+function sendMsg() {
+  const input = document.getElementById("msg");
+  const text = input.value.trim();
+  if (!text) return;
+
+  socket.emit("send_message", {
+    user: username,
+    text: text,
+    room: currentRoom
+  });
+
+  input.value = "";
+}
+
+// 화면 출력
+function addMessage(msg) {
+  const div = document.createElement("div");
+  div.innerText = `[${msg.time}] ${msg.user}: ${msg.text}`;
+  document.getElementById("chat").appendChild(div);
+}
+
+// 엔터 전송
+document.getElementById("msg").addEventListener("keydown", e => {
+  if (e.key === "Enter") sendMsg();
+});
+</script>
+
+</body>
+</html>
